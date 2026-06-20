@@ -11,19 +11,22 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest]
+        browser: [chromium, firefox, webkit]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
-          cache: pnpm
+          node-version: 24
+          cache: false
 
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm exec playwright install --with-deps
 
       - run: pnpm test
+        env:
+          TEST_BROWSER: ${{ matrix.browser }}

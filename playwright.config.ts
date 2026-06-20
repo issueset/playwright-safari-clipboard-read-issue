@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const browser = process.env.TEST_BROWSER || 'chromium'
+
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
@@ -14,13 +16,26 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
   },
   projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
+    (() => {
+      if (browser === 'chromium') {
+        return {
+          name: 'chromium',
+          use: { ...devices['Desktop Chrome'] },
+        }
+      }
+      if (browser === 'firefox') {
+        return {
+          name: 'firefox',
+          use: { ...devices['Desktop Firefox'] },
+        }
+      }
+      if (browser === 'webkit') {
+        return {
+          name: 'webkit',
+          use: { ...devices['Desktop Safari'] },
+        }
+      }
+      throw new Error(`Unsupported browser: ${browser}`)
+    })()
   ],
 })
