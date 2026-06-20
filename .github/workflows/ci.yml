@@ -6,12 +6,15 @@ on:
 
 jobs:
   test:
+    name: ${{ matrix.dir }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
-        browser: [chromium, firefox, webkit]
-    runs-on: ${{ matrix.os }}
+        dir: [playwright-test, vitest-test]
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
     steps:
       - uses: actions/checkout@v7
 
@@ -23,8 +26,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm exec playwright install --with-deps
+      - run: pnpm exec playwright install webkit
 
       - run: pnpm test
-        env:
-          TEST_BROWSER: ${{ matrix.browser }}

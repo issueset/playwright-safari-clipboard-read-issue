@@ -1,0 +1,12 @@
+{
+  "name": "playwright-test",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "packageManager": "pnpm@10.28.1",
+  "devDependencies": {
+    "@playwright/test": "1.61.0"
+  }
+}
