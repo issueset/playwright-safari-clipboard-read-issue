@@ -1,27 +1,71 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Frame, type Page } from '@playwright/test'
 
-// Mirrors Playwright's own "should support clipboard read" test:
-// https://github.com/microsoft/playwright/blob/main/tests/library/permissions.spec.ts
+// This repro isolates *why* `navigator.clipboard.readText()` throws
+//   NotAllowedError: The request is not allowed by the user agent ...
+// in WebKit, by crossing two variables:
 //
-// That test only marks WebKit as broken on Windows and on Linux/WPE headless.
-// macOS WebKit is expected to pass, but it throws:
-//   NotAllowedError: The request is not allowed by the user agent or the
-//   platform in the current context, possibly because the user denied permission.
-test('should support clipboard read', async ({ page, context, browserName }) => {
-  await page.goto('/')
+//   * permission:  granted via context.grantPermissions(['clipboard-read'])  vs  not granted
+//   * realm:       top-level document  vs  a same-origin <iframe>
+//
+// meowdown's vitest-browser setup hits the "not granted, iframe" corner for
+// WebKit (it only grants clipboard permissions to Chromium, and vitest runs
+// each test inside an iframe), which is the combination that fails on macOS.
+//
+// In every case the write happens from a real user gesture (a button click),
+// exactly like meowdown's code-block copy button.
 
-  // There is no 'clipboard-read' permission in WebKit Web API, but
-  // grantPermissions accepts it.
-  await context.grantPermissions(['clipboard-read'])
+const TEXT = 'test content'
 
-  // There is no 'clipboard-write' permission in WebKit Web API.
+async function grant(page: Page, browserName: string): Promise<void> {
+  await page.context().grantPermissions(['clipboard-read'])
+  // There is no 'clipboard-write' permission in the WebKit/Firefox Web API.
   if (browserName === 'chromium') {
-    await context.grantPermissions(['clipboard-write'])
+    await page.context().grantPermissions(['clipboard-write'])
   }
+}
 
-  await page.evaluate(() => navigator.clipboard.writeText('test content'))
+function getIframe(page: Page): Frame {
+  const frame = page.frames().find((candidate) => candidate.url().endsWith('/frame'))
+  if (!frame) {
+    throw new Error('could not find the /frame iframe')
+  }
+  return frame
+}
 
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-    'test content',
-  )
+function readClipboard(frame: Frame): Promise<string> {
+  return frame.evaluate(() => navigator.clipboard.readText())
+}
+
+test.describe('top-level document', () => {
+  test('permission granted', async ({ page, browserName }) => {
+    await page.goto('/')
+    await grant(page, browserName)
+    await page.locator('#copy').click()
+    await expect(page.locator('body')).toHaveAttribute('data-copied')
+    expect(await readClipboard(page.mainFrame())).toBe(TEXT)
+  })
+
+  test('permission not granted', async ({ page, browserName }) => {
+    test.skip(browserName !== 'webkit', 'meowdown only studies the WebKit, no-grant corner')
+    await page.goto('/')
+    await page.locator('#copy').click()
+    await expect(page.locator('body')).toHaveAttribute('data-copied')
+    expect(await readClipboard(page.mainFrame())).toBe(TEXT)
+  })
+})
+
+test.describe('same-origin iframe', () => {
+  test('permission granted', async ({ page, browserName }) => {
+    await page.goto('/')
+    await grant(page, browserName)
+    await page.frameLocator('#frame').locator('#copy').click()
+    expect(await readClipboard(getIframe(page))).toBe(TEXT)
+  })
+
+  test('permission not granted', async ({ page, browserName }) => {
+    test.skip(browserName !== 'webkit', 'meowdown only studies the WebKit, no-grant corner')
+    await page.goto('/')
+    await page.frameLocator('#frame').locator('#copy').click()
+    expect(await readClipboard(getIframe(page))).toBe(TEXT)
+  })
 })
